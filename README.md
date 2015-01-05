@@ -19,14 +19,14 @@ PIC16F628A and friends.  The solution has three parts:
 See the [documentation](http://rweather.github.com/ardpicprog/)
 for more information on the project.
 
-## Support for 16F1454/55/59 added by [@jgeisler0303](https://github.com/alchemycs/ardpicprog)
-Support added for 16F1454/55/59 with info from http://ww1.microchip.com/downloads/en/DeviceDoc/41620C.pdf
+## Support for 16F1454/55/59 added by [@jgeisler0303](https://github.com/jgeisler0303/ardpicprog)
+Support added for 16F1454/55/59 with info from http://ww1.microchip.com/downloads/en/DeviceDoc/41620C.pdf. 
 For this purpose I also change some timing constants (increased delay times) and changed the order of 
 setting the clock and data signals low before turning off VDD. Also, the data line is returned to low after every clock cycle.
-I am not sure which of these changes were exactly necessary to make it for for the 16f1454 but hope they don't break it for the other PICs.
+I am not sure which of these changes were exactly necessary to make it work for the 16f1454 but hope they don't break it for the other PICs.
 
-The 16F1454 must be programmed viw ICSP. The datasheet states that the programming voltage should be between 8 and 9V. So, I used a 9V batterie instead of the 13V supply.
-Because the Vpp pin takes to much current, the voltage drop across the [10k pull-up](http://rweather.github.io/ardpicprog/pic14_zif_circuit.png) is too high, so I changed it to 4.7k.
+The 16F1454 must be programmed via ICSP. The data-sheet states that the programming voltage should be between 8 and 9V. So, I used a 9V batterie instead of the 13V supply.
+Because the Vpp pin takes too much current, the voltage drop across the [10k pull-up](http://rweather.github.io/ardpicprog/pic14_zif_circuit.png) is too high, so I changed it to 4.7k.
 Also, I used a logic-level n-channel mosfet instead of the BC548, because that's what I had at hand.
 
 Finally I changed the activity LED to pin 13, because my Arduino board has a LED installed there already and I didn't want to bread-board more components than necessary.
