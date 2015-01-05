@@ -1,1 +1,15 @@
+#C ignores
+*.hex
+*.o
+*.elf
+*.DS_Store
+*.d
+*.eep
+*.lss
+*.map
+
+
+# Other ignores
+.directory
+.kate-swp
 *.swp

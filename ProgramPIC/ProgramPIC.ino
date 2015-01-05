@@ -20,7 +20,7 @@
 
 // Pin mappings for the PIC programming shield.
 #define PIN_MCLR        A1      // 0: MCLR is VPP voltage, 1: Reset PIC
-#define PIN_ACTIVITY    A5      // LED that indicates read/write activity
+#define PIN_ACTIVITY    13      // LED that indicates read/write activity
 #define PIN_VDD         2       // Controls the power to the PIC
 #define PIN_CLOCK       4       // Clock pin
 #define PIN_DATA        7       // Data pin
@@ -31,14 +31,15 @@
 // All delays are in microseconds.
 #define DELAY_SETTLE    50      // Delay for lines to settle for reset
 #define DELAY_TPPDP     5       // Hold time after raising MCLR
-#define DELAY_THLD0     5       // Hold time after raising VDD
-#define DELAY_TSET1     1       // Data in setup time before lowering clock
-#define DELAY_THLD1     1       // Data in hold time after lowering clock
-#define DELAY_TDLY2     1       // Delay between commands or data
-#define DELAY_TDLY3     1       // Delay until data bit read will be valid
+#define DELAY_THLD0     250       // Hold time after raising VDD
+#define DELAY_TEXIT     3       // Hold time after lowering VPP to turning off VDD
+#define DELAY_TSET1     3       // Data in setup time before lowering clock
+#define DELAY_THLD1     3       // Data in hold time after lowering clock
+#define DELAY_TDLY2     3       // Delay between commands or data
+#define DELAY_TDLY3     3       // Delay until data bit read will be valid
 #define DELAY_TPROG     4000    // Time for a program memory write to complete
-#define DELAY_TDPROG    6000    // Time for a data memory write to complete
-#define DELAY_TERA      6000    // Time for a word erase to complete
+#define DELAY_TDPROG    6000    // Time for a data memory write to complete, used in sum with DELAY_TERA (PIC16f1454: TPINT=2.5 to 5ms)
+#define DELAY_TERA      6000    // Time for a word erase to complete (PIC16f1454: TERAB=5ms)
 #define DELAY_TPROG5    1000    // Time for program write on FLASH5 systems
 #define DELAY_TFULLERA  50000   // Time for a full chip erase
 #define DELAY_TFULL84   20000   // Intermediate wait for PIC16F84/PIC16F84A
@@ -49,13 +50,15 @@
 #define CMD_LOAD_DATA_MEMORY    0x03    // Load to data memory
 #define CMD_INCREMENT_ADDRESS   0x06    // Increment the PC
 #define CMD_READ_PROGRAM_MEMORY 0x04    // Read from program memory
-#define CMD_READ_DATA_MEMORY    0x05    // Read from data memory
-#define CMD_BEGIN_PROGRAM       0x08    // Begin programming with erase cycle
-#define CMD_BEGIN_PROGRAM_ONLY  0x18    // Begin programming only cycle
-#define CMD_END_PROGRAM_ONLY    0x17    // End programming only cycle
+#define CMD_READ_DATA_MEMORY    0x05    // Read from data memory (PIC16f1454: NA)
+#define CMD_BEGIN_PROGRAM       0x08    // Begin programming with erase cycle (PIC16f1454: internally timed programming)
+#define CMD_BEGIN_PROGRAM_ONLY  0x18    // Begin programming only cycle (PIC16f1454: externally timed programming)
+#define CMD_END_PROGRAM_ONLY    0x17    // End programming only cycle (PIC16f1454: NA)
 #define CMD_BULK_ERASE_PROGRAM  0x09    // Bulk erase program memory
-#define CMD_BULK_ERASE_DATA     0x0B    // Bulk erase data memory
-#define CMD_CHIP_ERASE          0x1F    // Erase the entire chip
+#define CMD_BULK_ERASE_DATA     0x0B    // Bulk erase data memory (PIC16f1454: NA)
+#define CMD_CHIP_ERASE          0x1F    // Erase the entire chip (PIC16f1454: NA)
+#define CMD_ROW_ERASE           0x11    // PIC16f1454: Erase one row, not used for now
+
 
 // States this application may be in.
 #define STATE_IDLE      0       // Idle, device is held in the reset state
@@ -68,6 +71,7 @@ int state = STATE_IDLE;
 #define FLASH           1
 #define FLASH4          4
 #define FLASH5          5
+#define FLASHONLY       6
 
 unsigned long pc = 0;           // Current program counter.
 
@@ -83,6 +87,7 @@ unsigned long reservedEnd   = 0x07FF;
 unsigned int  configSave    = 0x0000;
 byte progFlashType          = FLASH4;
 byte dataFlashType          = EEPROM;
+byte maskDeviceID           = 1;
 
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[]  PROGMEM = "pic12f629";
@@ -103,6 +108,8 @@ const char s_pic16f883[]  PROGMEM = "pic16f883";
 const char s_pic16f884[]  PROGMEM = "pic16f884";
 const char s_pic16f886[]  PROGMEM = "pic16f886";
 const char s_pic16f887[]  PROGMEM = "pic16f887";
+const char s_pic16f877[] PROGMEM = "pic16f877";
+const char s_pic16f1454[] PROGMEM = "pic16f1454";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
@@ -120,39 +127,45 @@ struct deviceInfo
     prog_uint16_t configSave;   // Bits in config word to be saved.
     prog_uint8_t progFlashType; // Type of flash for program memory.
     prog_uint8_t dataFlashType; // Type of flash for data memory.
-
+    prog_uint8_t maskDeviceID;  // apply 0xFFE0 mask to device ID
 };
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
-    {s_pic12f629,  0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-    {s_pic12f675,  0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-    {s_pic16f630,  0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-    {s_pic16f676,  0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
+    {s_pic12f629,  0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, 1},
+    {s_pic12f675,  0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, 1},
+    {s_pic16f630,  0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, 1},
+    {s_pic16f676,  0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, 1},
 
     // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
-    {s_pic16f84,   -1,     1024, 0x2000, 0x2100, 8,  64, 0, 0, FLASH,  EEPROM},
-    {s_pic16f84a,  0x0560, 1024, 0x2000, 0x2100, 8,  64, 0, 0, FLASH,  EEPROM},
+    {s_pic16f84,   -1,     1024, 0x2000, 0x2100, 8,  64, 0, 0, FLASH,  EEPROM, 1},
+    {s_pic16f84a,  0x0560, 1024, 0x2000, 0x2100, 8,  64, 0, 0, FLASH,  EEPROM, 1},
 
     // http://ww1.microchip.com/downloads/en/DeviceDoc/39607c.pdf
-    {s_pic16f87,   0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM},
-    {s_pic16f88,   0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM},
+    {s_pic16f87,   0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, 1},
+    {s_pic16f88,   0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, 1},
 
     // 627/628:  http://ww1.microchip.com/downloads/en/DeviceDoc/30034d.pdf
     // A series: http://ww1.microchip.com/downloads/en/DeviceDoc/41196g.pdf
-    {s_pic16f627,  0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH,  EEPROM},
-    {s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM},
-    {s_pic16f628,  0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH,  EEPROM},
-    {s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM},
-    {s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
+    {s_pic16f627,  0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH,  EEPROM, 1},
+    {s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f628,  0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH,  EEPROM, 1},
+    {s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, 1},
 
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf
-    {s_pic16f882,  0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM},
-    {s_pic16f883,  0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-    {s_pic16f884,  0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-    {s_pic16f886,  0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-    {s_pic16f887,  0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
+    {s_pic16f882,  0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f883,  0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f884,  0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f886,  0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, 1},
+    {s_pic16f887,  0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, 1},
 
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
+    {s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, 1 },
+    
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/41620C.pdf
+    {s_pic16f1454, 0x3020, 8192, 0x8000, 0x8200, 12, 0, 0, 0, FLASHONLY, EEPROM, 0 },
+
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
 // Buffer for command-line character input and READBIN data packets.
@@ -372,7 +385,10 @@ void cmdDevice(const char *args)
             break;
         }
         int id = pgm_read_word(&(devices[index].deviceId));
-        if (id == (deviceId & 0xFFE0))
+	maskDeviceID= pgm_read_word(&(devices[index].maskDeviceID));
+	int deviceId_= deviceId;
+	if(maskDeviceID) deviceId_&= 0xFFE0;
+        if (id == deviceId_)
             break;
         ++index;
     }
@@ -840,6 +856,11 @@ void cmdErase(const char *args)
 
     // Perform the memory type specific erase sequence.
     switch (progFlashType) {
+    case FLASHONLY:
+        setErasePC();
+        sendSimpleCommand(CMD_BULK_ERASE_PROGRAM);
+        delayMicroseconds(DELAY_TERA);
+        break;
     case FLASH4:
         setErasePC();
         sendSimpleCommand(CMD_BULK_ERASE_PROGRAM);
@@ -1111,10 +1132,11 @@ void exitProgramMode()
         return;
 
     // Lower MCLR, VDD, DATA, and CLOCK.
-    digitalWrite(PIN_MCLR, MCLR_RESET);
-    digitalWrite(PIN_VDD, LOW);
     digitalWrite(PIN_DATA, LOW);
     digitalWrite(PIN_CLOCK, LOW);
+    digitalWrite(PIN_MCLR, MCLR_RESET);
+    delayMicroseconds(DELAY_TEXIT);
+    digitalWrite(PIN_VDD, LOW);
 
     // Float the DATA and CLOCK pins.
     pinMode(PIN_DATA, INPUT);
@@ -1128,6 +1150,7 @@ void exitProgramMode()
 // Send a command to the PIC.
 void sendCommand(byte cmd)
 {
+    digitalWrite(PIN_DATA, LOW);
     for (byte bit = 0; bit < 6; ++bit) {
         digitalWrite(PIN_CLOCK, HIGH);
         if (cmd & 1)
@@ -1139,6 +1162,7 @@ void sendCommand(byte cmd)
         delayMicroseconds(DELAY_THLD1);
         cmd >>= 1;
     }
+    digitalWrite(PIN_DATA,LOW);
 }
 
 // Send a command to the PIC that has no arguments.
@@ -1164,6 +1188,7 @@ void sendWriteCommand(byte cmd, unsigned int data)
         delayMicroseconds(DELAY_THLD1);
         data >>= 1;
     }
+    digitalWrite(PIN_DATA,LOW);
     delayMicroseconds(DELAY_TDLY2);
 }
 
@@ -1172,7 +1197,7 @@ unsigned int sendReadCommand(byte cmd)
 {
     unsigned int data = 0;
     sendCommand(cmd);
-    digitalWrite(PIN_DATA, LOW);
+    //digitalWrite(PIN_DATA, LOW);
     pinMode(PIN_DATA, INPUT);
     delayMicroseconds(DELAY_TDLY2);
     for (byte bit = 0; bit < 16; ++bit) {
@@ -1293,6 +1318,7 @@ unsigned int readConfigWord(unsigned long addr)
 void beginProgramCycle(unsigned long addr, bool isData)
 {
     switch (isData ? dataFlashType : progFlashType) {
+    case FLASHONLY:
     case FLASH:
     case EEPROM:
         sendSimpleCommand(CMD_BEGIN_PROGRAM);
