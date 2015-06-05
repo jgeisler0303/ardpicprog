@@ -31,7 +31,7 @@
 // All delays are in microseconds.
 #define DELAY_SETTLE    50      // Delay for lines to settle for reset
 #define DELAY_TPPDP     5       // Hold time after raising MCLR
-#define DELAY_THLD0     250       // Hold time after raising VDD
+#define DELAY_THLD0     280       // Hold time after raising VDD
 #define DELAY_TEXIT     3       // Hold time after lowering VPP to turning off VDD
 #define DELAY_TSET1     3       // Data in setup time before lowering clock
 #define DELAY_THLD1     3       // Data in hold time after lowering clock
@@ -1118,7 +1118,14 @@ void enterProgramMode()
     delayMicroseconds(DELAY_TPPDP);
     digitalWrite(PIN_VDD, HIGH);
     delayMicroseconds(DELAY_THLD0);
-
+    
+    sendData(0x0050, 8); // 'P'
+    sendData(0x0048, 8); // 'H'
+    sendData(0x0043, 8); // 'C'
+    sendData(0x004D, 9); // 'M' plus one extra bit!!!
+    
+    digitalWrite(PIN_DATA, LOW);
+    
     // Now in program mode, starting at the first word of program memory.
     state = STATE_PROGRAM;
     pc = 0;
@@ -1147,21 +1154,27 @@ void exitProgramMode()
     pc = 0;
 }
 
+void sendData(unsigned int data, byte bits)
+{
+    for (byte bit = 0; bit < bits; ++bit) {
+        digitalWrite(PIN_CLOCK, HIGH);
+        if (data & 1)
+            digitalWrite(PIN_DATA, HIGH);
+        else
+            digitalWrite(PIN_DATA, LOW);
+            
+        delayMicroseconds(DELAY_TSET1);
+        digitalWrite(PIN_CLOCK, LOW);
+        delayMicroseconds(DELAY_THLD1);
+        data >>= 1;
+    }
+}
+
 // Send a command to the PIC.
 void sendCommand(byte cmd)
 {
     digitalWrite(PIN_DATA, LOW);
-    for (byte bit = 0; bit < 6; ++bit) {
-        digitalWrite(PIN_CLOCK, HIGH);
-        if (cmd & 1)
-            digitalWrite(PIN_DATA, HIGH);
-        else
-            digitalWrite(PIN_DATA, LOW);
-        delayMicroseconds(DELAY_TSET1);
-        digitalWrite(PIN_CLOCK, LOW);
-        delayMicroseconds(DELAY_THLD1);
-        cmd >>= 1;
-    }
+    sendData(cmd, 6);    
     digitalWrite(PIN_DATA,LOW);
 }
 
@@ -1177,17 +1190,8 @@ void sendWriteCommand(byte cmd, unsigned int data)
 {
     sendCommand(cmd);
     delayMicroseconds(DELAY_TDLY2);
-    for (byte bit = 0; bit < 16; ++bit) {
-        digitalWrite(PIN_CLOCK, HIGH);
-        if (data & 1)
-            digitalWrite(PIN_DATA, HIGH);
-        else
-            digitalWrite(PIN_DATA, LOW);
-        delayMicroseconds(DELAY_TSET1);
-        digitalWrite(PIN_CLOCK, LOW);
-        delayMicroseconds(DELAY_THLD1);
-        data >>= 1;
-    }
+
+    sendData(data, 16);
     digitalWrite(PIN_DATA,LOW);
     delayMicroseconds(DELAY_TDLY2);
 }
