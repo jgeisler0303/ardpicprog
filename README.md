@@ -2,6 +2,21 @@
 Arduino-based PIC programmer
 ============================
 
+## Changed to perfom low voltage programming for the 16F1454/55/59 by [@jgeisler0303]
+This version of the Arduino PIC programming sketch now performs low voltage programming on the PIC 16F1454/55/59.
+It will probably not work with most other PICs. And there is no option to change back to high voltage programming.
+In this respect this is a dirty hack!
+Maybe I will clean this up later. Maybe someone selse will. For now this version is meant to be used to flash the USB-to-serial PIC in the [Frienduino project](https://github.com/jgeisler0303/Frienduino).
+
+To perfom low voltage programming you have to connect the PIC as follows:
+* Pin RC1 (pin 9 of the 16F1454) to digital pin  4 of your programmer Arduino (ICPSCLK)
+* Pin RC0 (pin 10 of the 16F1454) to digital pin  7 of your programmer Arduino (ICPSDAT)
+* Pin !MCLR (pin 4 of the 16F1454) to analog pin  1 of your programmer Arduino
+* Vdd (pin 1 of the 16F1454) to +5V of your programmer Arduino
+* Vss (pin 14 of the 16F1454) to ground of your programmer Arduino
+
+
+## Summary
 This distribution contains an Arduino-based solution for programming
 PIC microcontrollers from Microchip Technology Inc, such as the
 PIC16F628A and friends.  The solution has three parts:
