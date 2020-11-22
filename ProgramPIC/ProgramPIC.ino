@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define __PROG_TYPES_COMPAT__
+#define __TYPES_COMPAT__
 #include <avr/pgmspace.h>       // For PROGMEM
 
 // Pin mappings for the PIC programming shield.
@@ -116,18 +116,18 @@ const char s_pic16f1454[] PROGMEM = "pic16f1454";
 // been tested by the author.  Patches welcome to improve the list.
 struct deviceInfo
 {
-    const prog_char *name;      // User-readable name of the device.
-    prog_int16_t deviceId;      // Device ID for the PIC (-1 if no id).
-    prog_uint32_t programSize;  // Size of program memory (words).
-    prog_uint32_t configStart;  // Flat address start of configuration memory.
-    prog_uint32_t dataStart;    // Flat address start of EEPROM data memory.
-    prog_uint16_t configSize;   // Number of configuration words.
-    prog_uint16_t dataSize;     // Size of EEPROM data memory (bytes).
-    prog_uint16_t reservedWords;// Reserved program words (e.g. for OSCCAL).
-    prog_uint16_t configSave;   // Bits in config word to be saved.
-    prog_uint8_t progFlashType; // Type of flash for program memory.
-    prog_uint8_t dataFlashType; // Type of flash for data memory.
-    prog_uint8_t maskDeviceID;  // apply 0xFFE0 mask to device ID
+    const char *name;      // User-readable name of the device.
+    int16_t deviceId;      // Device ID for the PIC (-1 if no id).
+    uint32_t programSize;  // Size of program memory (words).
+    uint32_t configStart;  // Flat address start of configuration memory.
+    uint32_t dataStart;    // Flat address start of EEPROM data memory.
+    uint16_t configSize;   // Number of configuration words.
+    uint16_t dataSize;     // Size of EEPROM data memory (bytes).
+    uint16_t reservedWords;// Reserved program words (e.g. for OSCCAL).
+    uint16_t configSave;   // Bits in config word to be saved.
+    uint8_t progFlashType; // Type of flash for program memory.
+    uint8_t dataFlashType; // Type of flash for data memory.
+    uint8_t maskDeviceID;  // apply 0xFFE0 mask to device ID
 };
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
@@ -256,7 +256,7 @@ void printHex8(unsigned long word)
     printHex4((unsigned int)word);
 }
 
-void printProgString(const prog_char *str)
+void printProgString(const char *str)
 {
     for (;;) {
         char ch = (char)(pgm_read_byte(str));
@@ -291,7 +291,7 @@ void initDevice(const struct deviceInfo *dev)
 
     // Print the extra device information.
     Serial.print("DeviceName: ");
-    printProgString((const prog_char *)(pgm_read_word(&(dev->name))));
+    printProgString((const char *)(pgm_read_word(&(dev->name))));
     Serial.println();
     Serial.print("ProgramRange: 0000-");
     printHex8(programEnd);
@@ -378,7 +378,7 @@ void cmdDevice(const char *args)
     // Find the device in the built-in list if we have details for it.
     int index = 0;
     for (;;) {
-        const prog_char *name = (const prog_char *)
+        const char *name = (const char *)
             (pgm_read_word(&(devices[index].name)));
         if (!name) {
             index = -1;
@@ -425,7 +425,7 @@ void cmdDevices(const char *args)
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const prog_char *name = (const prog_char *)
+        const char *name = (const char *)
             (pgm_read_word(&(devices[index].name)));
         if (!name)
             break;
@@ -461,7 +461,7 @@ void cmdSetDevice(const char *args)
     // Look for the name in the devices list.
     int index = 0;
     for (;;) {
-        const prog_char *name = (const prog_char *)
+        const char *name = (const char *)
             (pgm_read_word(&(devices[index].name)));
         if (!name)
             break;
@@ -940,10 +940,10 @@ void cmdPowerOff(const char *args)
 typedef void (*commandFunc)(const char *args);
 typedef struct
 {
-    const prog_char *name;
+    const char *name;
     commandFunc func;
-    const prog_char *desc;
-    const prog_char *args;
+    const char *desc;
+    const char *args;
 } command_t;
 const char s_cmdRead[] PROGMEM = "READ";
 const char s_cmdReadDesc[] PROGMEM =
@@ -1003,13 +1003,13 @@ void cmdHelp(const char *args)
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const prog_char *name = (const prog_char *)
+        const char *name = (const char *)
             (pgm_read_word(&(commands[index].name)));
         if (!name)
             break;
-        const prog_char *desc = (const prog_char *)
+        const char *desc = (const char *)
             (pgm_read_word(&(commands[index].desc)));
-        const prog_char *args = (const prog_char *)
+        const char *args = (const char *)
             (pgm_read_word(&(commands[index].args)));
         printProgString(name);
         if (args) {
@@ -1026,7 +1026,7 @@ void cmdHelp(const char *args)
 }
 
 // Match a data-space string where the name comes from PROGMEM.
-bool matchString(const prog_char *name, const char *str, int len)
+bool matchString(const char *name, const char *str, int len)
 {
     for (;;) {
         char ch1 = (char)(pgm_read_byte(name));
@@ -1075,7 +1075,7 @@ void processCommand(const char *buf)
     // Find the command and execute it.
     int index = 0;
     for (;;) {
-        const prog_char *name = (const prog_char *)
+        const char *name = (const char *)
             (pgm_read_word(&(commands[index].name)));
         if (!name)
             break;
